@@ -135,6 +135,7 @@ function metricKey() {
 
 function metricLabel() {
   if (metricKey() === "amount") return "Monto";
+  if (metricKey() === "bonusUnits") return "Bonificacion";
   if (metricKey() === "deliveryUnits") return "Unidades a entregar";
   return "Unidades vendidas";
 }
@@ -252,17 +253,19 @@ function setupDropdown(button, panel) {
 function aggregate(rows) {
   const orderIds = new Set();
   let units = 0;
+  let bonusUnits = 0;
   let deliveryUnits = 0;
   let amount = 0;
 
   rows.forEach((row) => {
     orderIds.add(row.orderNumber);
     units += row.units;
+    bonusUnits += row.bonusUnits;
     deliveryUnits += row.deliveryUnits;
     amount += row.amount;
   });
 
-  return { units, deliveryUnits, amount, orders: orderIds.size, lines: rows.length };
+  return { units, bonusUnits, deliveryUnits, amount, orders: orderIds.size, lines: rows.length };
 }
 
 function groupRows(rows, keyFn) {
@@ -650,6 +653,7 @@ function renderMonthlySummary(periods) {
   const yoy = sameMonthLastYear(base);
   const rows = [
     { label: "Unidades vendidas", metric: "units" },
+    { label: "Bonificacion", metric: "bonusUnits" },
     { label: "Unidades a entregar", metric: "deliveryUnits" },
     { label: "Monto", metric: "amount" },
     { label: "Comandas", metric: "orders" },
@@ -785,6 +789,7 @@ function normalize() {
         status: order.status || "Sin estado",
         paymentStatus: order.paymentStatus || "Sin estado de cobro",
         units: parseNumber(row.CANTIDAD),
+        bonusUnits: parseNumber(row["BONIFICACION A ENTREGAR"]),
         deliveryUnits: parseNumber(row["TOTAL A ENTREGAR"] || row.CANTIDAD),
         amount: parseNumber(row.SUBTOTAL),
         month: Number(row.MES),
