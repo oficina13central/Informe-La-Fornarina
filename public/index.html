@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Informe de Comandas</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header class="app-header">
+      <div>
+        <p class="eyebrow">CHAZARRETA</p>
+        <h1>Informe comparativo de comandas</h1>
+      </div>
+      <button id="printBtn" class="icon-button" title="Imprimir informe" aria-label="Imprimir informe">
+        <span aria-hidden="true">&#128424;</span>
+      </button>
+    </header>
+
+    <main>
+      <section class="toolbar" aria-label="Filtros del informe">
+        <label>
+          M&eacute;trica
+          <select id="metricFilter">
+            <option value="amount">Monto</option>
+            <option value="units">Unidades</option>
+          </select>
+        </label>
+        <label>
+          Variaciones sobre
+          <select id="basePeriodFilter"></select>
+        </label>
+        <div class="multi-filter">
+          <span class="filter-label">Grupo</span>
+          <button id="groupFilterBtn" type="button" class="filter-button" disabled>Cargando grupos...</button>
+          <div id="groupFilterPanel" class="filter-panel"></div>
+        </div>
+        <div class="multi-filter">
+          <span class="filter-label">Distribuidor</span>
+          <button id="clientFilterBtn" type="button" class="filter-button" disabled>Cargando distribuidores...</button>
+          <div id="clientFilterPanel" class="filter-panel wide"></div>
+        </div>
+        <div class="multi-filter">
+          <span class="filter-label">Estado</span>
+          <button id="statusFilterBtn" type="button" class="filter-button" disabled>Cargando estados...</button>
+          <div id="statusFilterPanel" class="filter-panel"></div>
+        </div>
+        <label>
+          Producto
+          <input id="productSearch" type="search" placeholder="Buscar producto">
+        </label>
+      </section>
+
+      <section class="period-panel">
+        <div class="section-heading compact">
+          <h2>Periodos a mostrar</h2>
+          <p>Marca los meses que queres ver como columnas.</p>
+        </div>
+        <div id="periodPicker" class="period-picker"></div>
+      </section>
+
+      <section class="status-line" id="statusLine">Cargando datos...</section>
+
+      <section class="executive-page">
+        <div class="executive-title">
+          <div>
+            <p class="eyebrow">Resumen ejecutivo</p>
+            <h2 id="executiveTitle">Informe del periodo</h2>
+          </div>
+          <p id="executiveFilters"></p>
+        </div>
+
+        <section class="summary-grid" aria-label="Resumen del periodo base">
+          <article>
+            <span>Total periodo base</span>
+            <strong id="baseTotal">-</strong>
+            <small id="baseCaption">-</small>
+          </article>
+          <article>
+            <span>Var. mes anterior</span>
+            <strong id="momDelta">-</strong>
+            <small id="momCaption">-</small>
+          </article>
+          <article>
+            <span>Var. mismo mes a&ntilde;o anterior</span>
+            <strong id="yoyDelta">-</strong>
+            <small id="yoyCaption">-</small>
+          </article>
+          <article>
+            <span>Comandas</span>
+            <strong id="orderCount">-</strong>
+            <small id="lineCount">-</small>
+          </article>
+        </section>
+
+        <section class="chart-grid cover-charts">
+          <article class="report-section">
+            <div class="section-heading">
+              <h2>Evolucion mensual</h2>
+              <p id="barCaption"></p>
+            </div>
+            <canvas id="monthBarChart" height="250"></canvas>
+          </article>
+
+          <article class="report-section">
+            <div class="section-heading">
+              <h2>Participacion por grupo</h2>
+              <p>Periodo base</p>
+            </div>
+            <canvas id="groupPieChart" height="250"></canvas>
+          </article>
+        </section>
+      </section>
+
+      <section class="report-section print-page">
+        <div class="section-heading">
+          <h2>Resumen por mes</h2>
+          <p id="summaryCaption"></p>
+        </div>
+        <div class="table-wrap">
+          <table id="monthlyTable">
+            <thead id="monthlyHead"></thead>
+            <tbody id="monthlyRows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="report-section">
+        <div class="section-heading">
+          <h2>Resumen por grupos</h2>
+          <p>Mismas columnas comparativas, agrupadas por grupo comercial.</p>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead id="groupHead"></thead>
+            <tbody id="groupRows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="report-section print-page">
+        <div class="section-heading">
+          <h2>Ranking de productos</h2>
+          <p>Meses seleccionados como columnas y variaciones al final.</p>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead id="productHead"></thead>
+            <tbody id="productRows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="report-section print-page">
+        <div class="section-heading">
+          <h2>Ranking de distribuidores</h2>
+          <p>Ordenado por el periodo base.</p>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead id="clientHead"></thead>
+            <tbody id="clientRows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="chart-grid print-page chart-page">
+        <article class="report-section">
+          <div class="section-heading">
+            <h2>Top productos</h2>
+            <p>Periodo base</p>
+          </div>
+          <canvas id="productBarChart" height="300"></canvas>
+        </article>
+
+        <article class="report-section">
+          <div class="section-heading">
+            <h2>Top distribuidores</h2>
+            <p>Periodo base</p>
+          </div>
+          <canvas id="clientBarChart" height="300"></canvas>
+        </article>
+      </section>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

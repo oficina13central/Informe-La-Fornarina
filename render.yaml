@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: chazarreta-reportes
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: GOOGLE_SHEET_ID
+        value: 11ObpaDhZ9j1UKpzMyP-mag2RCx-qeJVQ0K-KZD7RMrQ
