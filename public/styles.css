@@ -360,8 +360,14 @@ input {
 canvas {
   display: block;
   width: 100%;
+  height: 280px;
   padding: 8px 12px 12px;
   background: #ffffff;
+}
+
+#productBarChart,
+#clientBarChart {
+  height: 320px;
 }
 
 .table-wrap {

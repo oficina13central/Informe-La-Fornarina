@@ -417,7 +417,7 @@ function ellipsize(value, maxLength) {
 function chartSize(canvas, fallbackHeight) {
   const rect = canvas.getBoundingClientRect();
   const width = Math.max(360, Math.floor(rect.width));
-  const height = Number(canvas.getAttribute("height")) || fallbackHeight;
+  const height = Math.max(220, Math.floor(rect.height) || Number(canvas.getAttribute("height")) || fallbackHeight);
   const scale = window.devicePixelRatio || 1;
   canvas.width = width * scale;
   canvas.height = height * scale;
@@ -440,10 +440,10 @@ function roundedRect(ctx, x, y, w, h, radius) {
 
 function drawMonthlyChart(canvas, items) {
   const { ctx, width, height } = chartSize(canvas, 260);
-  const margin = { top: 24, right: 22, bottom: 56, left: 66 };
+  const margin = { top: 34, right: 24, bottom: 56, left: 72 };
   const plotW = width - margin.left - margin.right;
   const plotH = height - margin.top - margin.bottom;
-  const max = Math.max(...items.map((item) => item.value), 1);
+  const max = Math.max(...items.map((item) => item.value), 1) * 1.18;
   const gridSteps = 4;
 
   ctx.font = "12px Arial";
@@ -463,7 +463,7 @@ function drawMonthlyChart(canvas, items) {
 
   const slot = plotW / Math.max(items.length, 1);
   items.forEach((item, index) => {
-    const barW = Math.min(44, slot * 0.58);
+    const barW = Math.min(56, slot * 0.5);
     const barH = (item.value / max) * plotH;
     const x = margin.left + index * slot + (slot - barW) / 2;
     const y = margin.top + plotH - barH;
@@ -477,7 +477,7 @@ function drawMonthlyChart(canvas, items) {
     ctx.fillStyle = "#17202a";
     ctx.textAlign = "center";
     ctx.font = "700 11px Arial";
-    ctx.fillText(shortMetric(item.value), x + barW / 2, Math.max(14, y - 6));
+    ctx.fillText(shortMetric(item.value), x + barW / 2, Math.max(18, y - 7));
     ctx.font = "12px Arial";
     ctx.save();
     ctx.translate(x + barW / 2, margin.top + plotH + 16);
