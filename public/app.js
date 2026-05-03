@@ -341,8 +341,10 @@ function buildMatrixRows(rows, keyFn, label, limit = 20) {
       const byPeriod = new Map();
       itemRows.forEach((row) => {
         const key = periodKey(row.year, row.month);
-        const value = byPeriod.get(key) || { units: 0, amount: 0 };
+        const value = byPeriod.get(key) || { units: 0, bonusUnits: 0, deliveryUnits: 0, amount: 0 };
         value.units += row.units;
+        value.bonusUnits += row.bonusUnits;
+        value.deliveryUnits += row.deliveryUnits;
         value.amount += row.amount;
         byPeriod.set(key, value);
       });
