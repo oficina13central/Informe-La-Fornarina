@@ -18,6 +18,7 @@ const COLORS = ["#0f766e", "#2563eb", "#a16207", "#7c3aed", "#c2410c", "#be123c"
 const state = {
   comandas: [],
   detalles: [],
+  orders: [],
   joined: [],
   periods: [],
   selectedPeriodKeys: [],
@@ -111,6 +112,16 @@ function parseNumber(value) {
   const normalized = String(value).replace(/\./g, "").replace(",", ".");
   const number = Number(normalized);
   return Number.isFinite(number) ? number : 0;
+}
+
+function parsePeriodFromDate(value) {
+  const datePart = String(value || "").trim().split(/\s+/)[0];
+  const match = datePart.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (!match) return null;
+  const month = Number(match[2]);
+  const year = Number(match[3]);
+  if (!month || !year) return null;
+  return { month, year };
 }
 
 function formatNumber(value) {
@@ -268,6 +279,10 @@ function aggregate(rows) {
   return { units, bonusUnits, deliveryUnits, amount, orders: orderIds.size, lines: rows.length };
 }
 
+function rowsForMetric() {
+  return metricKey() === "amount" ? state.orders : state.joined;
+}
+
 function groupRows(rows, keyFn) {
   const grouped = new Map();
   rows.forEach((row) => {
@@ -288,8 +303,8 @@ function baseFilters(row) {
   );
 }
 
-function rowsForPeriod(period) {
-  return state.joined.filter((row) => row.year === period.year && row.month === period.month && baseFilters(row));
+function rowsForPeriod(period, sourceRows = rowsForMetric()) {
+  return sourceRows.filter((row) => row.year === period.year && row.month === period.month && baseFilters(row));
 }
 
 function getPeriodValue(period, rows = null) {
@@ -670,10 +685,11 @@ function renderMonthlySummary(periods) {
 
   els.monthlyRows.innerHTML = rows
     .map((row) => {
-      const values = periods.map((period) => aggregate(rowsForPeriod(period))[row.metric]);
-      const current = aggregate(rowsForPeriod(base))[row.metric];
-      const prevValue = aggregate(rowsForPeriod(prev))[row.metric];
-      const yoyValue = aggregate(rowsForPeriod(yoy))[row.metric];
+      const sourceRows = row.metric === "amount" || row.metric === "orders" ? state.orders : state.joined;
+      const values = periods.map((period) => aggregate(rowsForPeriod(period, sourceRows))[row.metric]);
+      const current = aggregate(rowsForPeriod(base, sourceRows))[row.metric];
+      const prevValue = aggregate(rowsForPeriod(prev, sourceRows))[row.metric];
+      const yoyValue = aggregate(rowsForPeriod(yoy, sourceRows))[row.metric];
       const formatter = row.metric === "amount" ? formatMoney : formatNumber;
       const mom = pct(current, prevValue);
       const yoyPct = pct(current, yoyValue);
@@ -729,11 +745,12 @@ function render() {
   const productRows = buildMatrixRows(state.joined, (row) => row.productName, "Sin producto", 25);
   renderMatrixTable(els.productHead, els.productRows, "Producto", productRows, state.joined);
 
-  const groupRows = buildMatrixRows(state.joined, (row) => row.group, "Sin grupo", 25);
-  renderMatrixTable(els.groupHead, els.groupRows, "Grupo", groupRows, state.joined);
+  const matrixRows = rowsForMetric();
+  const groupRows = buildMatrixRows(matrixRows, (row) => row.group, "Sin grupo", 25);
+  renderMatrixTable(els.groupHead, els.groupRows, "Grupo", groupRows, matrixRows);
 
-  const clientRows = buildMatrixRows(state.joined, (row) => row.clientName, "Sin distribuidor", 25);
-  renderMatrixTable(els.clientHead, els.clientRows, "Distribuidor", clientRows, state.joined);
+  const clientRows = buildMatrixRows(matrixRows, (row) => row.clientName, "Sin distribuidor", 25);
+  renderMatrixTable(els.clientHead, els.clientRows, "Distribuidor", clientRows, matrixRows);
 
   const monthChartItems = periods.map((period) => ({
     label: `${MONTHS[period.month - 1].slice(0, 3)} ${String(period.year).slice(2)}`,
@@ -742,7 +759,7 @@ function render() {
   drawBarChart(els.monthBar, monthChartItems);
   document.querySelector("#barCaption").textContent = metricLabel();
 
-  const groupItems = buildMatrixRows(state.joined, (row) => row.group, "Sin grupo", 8).map((row) => ({
+  const groupItems = buildMatrixRows(matrixRows, (row) => row.group, "Sin grupo", 8).map((row) => ({
     label: row.name,
     value: row.baseValue,
   }));
@@ -778,9 +795,30 @@ function normalize() {
     ])
   );
 
+  state.orders = state.comandas
+    .map((row) => {
+      const period = parsePeriodFromDate(row["FECHA DE ENTREGA"]);
+      return {
+        orderNumber: row["NUMERO DE COMANDA"],
+        clientName: row["NOMBRE DEL CLIENTE"] || "Sin cliente",
+        productName: "",
+        group: row.GRUPO || "Sin grupo",
+        status: row.STATUS || "Sin estado",
+        paymentStatus: row["STATUS COBRO"] || "Sin estado de cobro",
+        units: 0,
+        bonusUnits: 0,
+        deliveryUnits: 0,
+        amount: parseNumber(row.IMPORTE),
+        month: period?.month,
+        year: period?.year,
+      };
+    })
+    .filter((row) => row.month >= 1 && row.month <= 12 && row.year > 2000 && row.status === "ENTREGADO");
+
   state.joined = state.detalles
     .map((row) => {
       const order = comandasByNumber.get(row["NUMERO DE COMANDA"]) || {};
+      const period = parsePeriodFromDate(row["FECHA DE ENTREGA"]);
       return {
         orderNumber: row["NUMERO DE COMANDA"],
         clientName: row["NOMBRE CLIENTE"] || "Sin cliente",
@@ -792,16 +830,15 @@ function normalize() {
         bonusUnits: parseNumber(row["BONIFICACION A ENTREGAR"]),
         deliveryUnits: parseNumber(row["TOTAL A ENTREGAR"] || row.CANTIDAD),
         amount: parseNumber(row.SUBTOTAL),
-        month: Number(row.MES),
-        year: Number(row["AÑO"] || row["ANO"] || row["A\u00d1O"]),
+        month: period?.month,
+        year: period?.year,
       };
     })
-    .filter((row) => row.month >= 1 && row.month <= 12 && row.year > 2000);
+    .filter((row) => row.month >= 1 && row.month <= 12 && row.year > 2000 && row.status === "ENTREGADO");
 }
-
 function setupPeriods() {
   const periodMap = new Map();
-  state.joined.forEach((row) => {
+  [...state.joined, ...state.orders].forEach((row) => {
     const key = periodKey(row.year, row.month);
     periodMap.set(key, { key, year: row.year, month: row.month });
   });
