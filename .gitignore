@@ -1,6 +1,7 @@
 node_modules/
 .env
 pdf-preview/
+detalle-comanda.csv
 npm-debug.log*
 .DS_Store
 Thumbs.db
