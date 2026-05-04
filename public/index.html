@@ -20,6 +20,13 @@
     <main>
       <section class="toolbar" aria-label="Filtros del informe">
         <label>
+          Informe
+          <select id="reportTypeFilter">
+            <option value="sales">Comandas</option>
+            <option value="changes">Cambios</option>
+          </select>
+        </label>
+        <label>
           M&eacute;trica
           <select id="metricFilter">
             <option value="amount">Monto</option>
@@ -89,7 +96,7 @@
             <small id="yoyCaption">-</small>
           </article>
           <article>
-            <span>Comandas</span>
+            <span id="orderCountLabel">Comandas</span>
             <strong id="orderCount">-</strong>
             <small id="lineCount">-</small>
           </article>

@@ -72,7 +72,7 @@ const server = http.createServer(async (req, res) => {
 
   if (url.pathname.startsWith("/api/sheet/")) {
     const sheetName = decodeURIComponent(url.pathname.replace("/api/sheet/", ""));
-    if (!["COMANDA", "DETALLE COMANDA"].includes(sheetName)) {
+    if (!["COMANDA", "DETALLE COMANDA", "COMANDA DE CAMBIOS", "DETALLE DE CAMBIOS"].includes(sheetName)) {
       send(res, 400, JSON.stringify({ error: "Hoja no permitida" }), "application/json; charset=utf-8");
       return;
     }

@@ -18,8 +18,11 @@ const COLORS = ["#0f766e", "#2563eb", "#a16207", "#7c3aed", "#c2410c", "#be123c"
 const state = {
   comandas: [],
   detalles: [],
+  cambioClientes: [],
+  cambioDetalles: [],
   orders: [],
   joined: [],
+  changes: [],
   periods: [],
   selectedPeriodKeys: [],
   filters: {
@@ -30,6 +33,7 @@ const state = {
 };
 
 const els = {
+  reportType: document.querySelector("#reportTypeFilter"),
   metric: document.querySelector("#metricFilter"),
   basePeriod: document.querySelector("#basePeriodFilter"),
   groupBtn: document.querySelector("#groupFilterBtn"),
@@ -50,6 +54,7 @@ const els = {
   yoyDelta: document.querySelector("#yoyDelta"),
   yoyCaption: document.querySelector("#yoyCaption"),
   orderCount: document.querySelector("#orderCount"),
+  orderCountLabel: document.querySelector("#orderCountLabel"),
   lineCount: document.querySelector("#lineCount"),
   summaryCaption: document.querySelector("#summaryCaption"),
   monthlyHead: document.querySelector("#monthlyHead"),
@@ -141,10 +146,12 @@ function formatMetric(value) {
 }
 
 function metricKey() {
+  if (els.reportType.value === "changes") return "units";
   return els.metric.value;
 }
 
 function metricLabel() {
+  if (els.reportType.value === "changes") return "Unidades cambiadas";
   if (metricKey() === "amount") return "Monto";
   if (metricKey() === "bonusUnits") return "Bonificacion";
   if (metricKey() === "deliveryUnits") return "Unidades a entregar";
@@ -280,6 +287,7 @@ function aggregate(rows) {
 }
 
 function rowsForMetric() {
+  if (els.reportType.value === "changes") return state.changes;
   return metricKey() === "amount" ? state.orders : state.joined;
 }
 
@@ -668,13 +676,19 @@ function renderMonthlySummary(periods) {
   const base = activeBasePeriod();
   const prev = previousPeriod(base);
   const yoy = sameMonthLastYear(base);
-  const rows = [
-    { label: "Unidades vendidas", metric: "units" },
-    { label: "Bonificacion", metric: "bonusUnits" },
-    { label: "Unidades a entregar", metric: "deliveryUnits" },
-    { label: "Monto", metric: "amount" },
-    { label: "Comandas", metric: "orders" },
-  ];
+  const rows =
+    els.reportType.value === "changes"
+      ? [
+          { label: "Unidades cambiadas", metric: "units" },
+          { label: "Registros de cambio", metric: "orders" },
+        ]
+      : [
+          { label: "Unidades vendidas", metric: "units" },
+          { label: "Bonificacion", metric: "bonusUnits" },
+          { label: "Unidades a entregar", metric: "deliveryUnits" },
+          { label: "Monto", metric: "amount" },
+          { label: "Comandas", metric: "orders" },
+        ];
 
   els.monthlyHead.innerHTML = `
     <tr>
@@ -687,7 +701,12 @@ function renderMonthlySummary(periods) {
 
   els.monthlyRows.innerHTML = rows
     .map((row) => {
-      const sourceRows = row.metric === "amount" || row.metric === "orders" ? state.orders : state.joined;
+      const sourceRows =
+        els.reportType.value === "changes"
+          ? state.changes
+          : row.metric === "amount" || row.metric === "orders"
+            ? state.orders
+            : state.joined;
       const values = periods.map((period) => aggregate(rowsForPeriod(period, sourceRows))[row.metric]);
       const current = aggregate(rowsForPeriod(base, sourceRows))[row.metric];
       const prevValue = aggregate(rowsForPeriod(prev, sourceRows))[row.metric];
@@ -730,6 +749,7 @@ function render() {
   els.yoyDelta.className = valueClass(yoyPct);
   els.yoyCaption.textContent = `vs ${periodLabel(yoy)}`;
   els.orderCount.textContent = formatNumber(baseAgg.orders);
+  els.orderCountLabel.textContent = els.reportType.value === "changes" ? "Cambios" : "Comandas";
   els.lineCount.textContent = `${formatNumber(baseAgg.lines)} lineas de detalle`;
   els.summaryCaption.textContent = `${metricLabel()} seleccionado como metrica principal`;
   els.statusLine.textContent = `${periods.length} periodos seleccionados. Datos actualizados desde Google Sheets.`;
@@ -744,8 +764,9 @@ function render() {
 
   renderMonthlySummary(periods);
 
-  const productRows = buildMatrixRows(state.joined, (row) => row.productName, "Sin producto", 25);
-  renderMatrixTable(els.productHead, els.productRows, "Producto", productRows, state.joined);
+  const detailRows = els.reportType.value === "changes" ? state.changes : state.joined;
+  const productRows = buildMatrixRows(detailRows, (row) => row.productName, "Sin producto", 25);
+  renderMatrixTable(els.productHead, els.productRows, "Producto", productRows, detailRows);
 
   const matrixRows = rowsForMetric();
   const groupRows = buildMatrixRows(matrixRows, (row) => row.group, "Sin grupo", 25);
@@ -837,10 +858,35 @@ function normalize() {
       };
     })
     .filter((row) => row.month >= 1 && row.month <= 12 && row.year > 2000 && row.status === "ENTREGADO");
+
+  const cambioClientesByName = new Map(
+    state.cambioClientes.map((row) => [String(row.NOMBRE || "").trim().toUpperCase(), row.GRUPO || "Sin grupo"])
+  );
+
+  state.changes = state.cambioDetalles
+    .map((row) => {
+      const period = parsePeriodFromDate(row["FECHA DE ENTREGA"]);
+      const clientName = row.CLIENTE || "Sin cliente";
+      return {
+        orderNumber: row["NUMERO DE COMANDA DE CAMBIOS"] || row["ID_DETALLE DE CAMBIOS"],
+        clientName,
+        productName: row["NOMBRE PRODUCTO"] || "Sin producto",
+        group: cambioClientesByName.get(String(clientName).trim().toUpperCase()) || "Sin grupo",
+        status: "CAMBIO",
+        paymentStatus: "",
+        units: parseNumber(row.CANTIDAD),
+        bonusUnits: 0,
+        deliveryUnits: parseNumber(row.CANTIDAD),
+        amount: 0,
+        month: period?.month,
+        year: period?.year,
+      };
+    })
+    .filter((row) => row.month >= 1 && row.month <= 12 && row.year > 2000);
 }
 function setupPeriods() {
   const periodMap = new Map();
-  [...state.joined, ...state.orders].forEach((row) => {
+  [...state.joined, ...state.orders, ...state.changes].forEach((row) => {
     const key = periodKey(row.year, row.month);
     periodMap.set(key, { key, year: row.year, month: row.month });
   });
@@ -889,10 +935,11 @@ function refreshBasePeriodOptions() {
 }
 
 function setupFilters() {
+  const filterRows = els.reportType.value === "changes" ? state.changes : state.joined;
   renderMultiFilter(
     els.groupPanel,
     els.groupBtn,
-    [...new Set(state.joined.map((row) => row.group))].sort(),
+    [...new Set(filterRows.map((row) => row.group))].sort(),
     "groups",
     "Grupo",
     "Grupos"
@@ -900,7 +947,7 @@ function setupFilters() {
   renderMultiFilter(
     els.clientPanel,
     els.clientBtn,
-    [...new Set(state.joined.map((row) => row.clientName))].sort(),
+    [...new Set(filterRows.map((row) => row.clientName))].sort(),
     "clients",
     "Distribuidor",
     "Distribuidores"
@@ -908,7 +955,7 @@ function setupFilters() {
   renderMultiFilter(
     els.statusPanel,
     els.statusBtn,
-    [...new Set(state.joined.map((row) => row.status))].sort(),
+    [...new Set(filterRows.map((row) => row.status))].sort(),
     "statuses",
     "Estado",
     "Estados"
@@ -919,6 +966,14 @@ function setupFilters() {
   els.groupBtn.disabled = false;
   els.clientBtn.disabled = false;
   els.statusBtn.disabled = false;
+
+  els.reportType.addEventListener("input", () => {
+    selectedSet("groups").clear();
+    selectedSet("clients").clear();
+    selectedSet("statuses").clear();
+    refreshFilterPanels();
+    render();
+  });
 
   [els.metric, els.basePeriod, els.product].forEach((control) => {
     control.addEventListener("input", render);
@@ -936,9 +991,16 @@ function setupFilters() {
 async function init() {
   try {
     els.print.addEventListener("click", () => window.print());
-    const [comandas, detalles] = await Promise.all([loadSheet("COMANDA"), loadSheet("DETALLE COMANDA")]);
+    const [comandas, detalles, cambioClientes, cambioDetalles] = await Promise.all([
+      loadSheet("COMANDA"),
+      loadSheet("DETALLE COMANDA"),
+      loadSheet("COMANDA DE CAMBIOS"),
+      loadSheet("DETALLE DE CAMBIOS"),
+    ]);
     state.comandas = comandas;
     state.detalles = detalles;
+    state.cambioClientes = cambioClientes;
+    state.cambioDetalles = cambioDetalles;
     normalize();
     setupPeriods();
     setupFilters();
