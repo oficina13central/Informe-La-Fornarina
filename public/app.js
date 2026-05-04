@@ -886,7 +886,8 @@ function normalize() {
 }
 function setupPeriods() {
   const periodMap = new Map();
-  [...state.joined, ...state.orders, ...state.changes].forEach((row) => {
+  const sourceRows = els.reportType?.value === "changes" ? state.changes : [...state.joined, ...state.orders];
+  sourceRows.forEach((row) => {
     const key = periodKey(row.year, row.month);
     periodMap.set(key, { key, year: row.year, month: row.month });
   });
@@ -920,6 +921,10 @@ function setupPeriods() {
   });
 
   refreshBasePeriodOptions();
+}
+
+function resetPeriodsForCurrentReport() {
+  setupPeriods();
 }
 
 function refreshBasePeriodOptions() {
@@ -971,6 +976,7 @@ function setupFilters() {
     selectedSet("groups").clear();
     selectedSet("clients").clear();
     selectedSet("statuses").clear();
+    resetPeriodsForCurrentReport();
     refreshFilterPanels();
     render();
   });
