@@ -62,6 +62,10 @@ const els = {
   monthlyRows: document.querySelector("#monthlyRows"),
   productHead: document.querySelector("#productHead"),
   productRows: document.querySelector("#productRows"),
+  changeComparisonSection: document.querySelector("#changeComparisonSection"),
+  changeComparisonCaption: document.querySelector("#changeComparisonCaption"),
+  changeComparisonHead: document.querySelector("#changeComparisonHead"),
+  changeComparisonRows: document.querySelector("#changeComparisonRows"),
   groupHead: document.querySelector("#groupHead"),
   groupRows: document.querySelector("#groupRows"),
   clientHead: document.querySelector("#clientHead"),
@@ -437,6 +441,101 @@ function renderMatrixTable(head, body, firstColumn, rows, totalRows = null) {
   }
 }
 
+function comparisonColumnPlan(rows) {
+  const selectedClients = [...selectedSet("clients")];
+  const selectedGroups = [...selectedSet("groups")];
+  if (selectedClients.length) {
+    return {
+      label: "cliente",
+      caption: "Columnas: distribuidores seleccionados.",
+      keyFn: (row) => row.clientName,
+      columns: selectedClients,
+    };
+  }
+  if (selectedGroups.length) {
+    return {
+      label: "grupo",
+      caption: "Columnas: grupos seleccionados.",
+      keyFn: (row) => row.group,
+      columns: selectedGroups,
+    };
+  }
+
+  const totals = new Map();
+  rows.forEach((row) => {
+    totals.set(row.clientName, (totals.get(row.clientName) || 0) + row.units);
+  });
+  return {
+    label: "cliente",
+    caption: "Columnas: principales distribuidores del periodo base.",
+    keyFn: (row) => row.clientName,
+    columns: [...totals.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8)
+      .map(([name]) => name),
+  };
+}
+
+function renderChangeComparisonTable() {
+  const isChangesReport = reportType() === "changes";
+  els.changeComparisonSection.classList.toggle("hidden", !isChangesReport);
+  if (!isChangesReport) return;
+
+  const base = activeBasePeriod();
+  const baseRows = rowsForPeriod(base, state.changes);
+  const plan = comparisonColumnPlan(baseRows);
+  els.changeComparisonCaption.textContent = `${periodLabel(base)}. ${plan.caption}`;
+
+  els.changeComparisonHead.innerHTML = `
+    <tr>
+      <th>Producto</th>
+      ${plan.columns.map((column) => `<th class="num">${column}</th>`).join("")}
+      <th class="num">Total</th>
+    </tr>
+  `;
+
+  const productMap = new Map();
+  baseRows.forEach((row) => {
+    const column = plan.keyFn(row);
+    if (!plan.columns.includes(column)) return;
+    if (!productMap.has(row.productName)) {
+      productMap.set(row.productName, {
+        name: row.productName,
+        values: new Map(plan.columns.map((item) => [item, 0])),
+        total: 0,
+      });
+    }
+    const item = productMap.get(row.productName);
+    item.values.set(column, item.values.get(column) + row.units);
+    item.total += row.units;
+  });
+
+  const rows = [...productMap.values()]
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 25);
+
+  if (!rows.length || !plan.columns.length) {
+    els.changeComparisonRows.innerHTML = `
+      <tr>
+        <td colspan="${plan.columns.length + 2}">Sin datos para el periodo base con los filtros actuales.</td>
+      </tr>
+    `;
+    return;
+  }
+
+  els.changeComparisonRows.innerHTML = rows
+    .map(
+      (row) => `
+        <tr>
+          <td>${row.name}</td>
+          ${plan.columns.map((column) => `<td class="num">${formatNumber(row.values.get(column) || 0)}</td>`).join("")}
+          <td class="num"><strong>${formatNumber(row.total)}</strong></td>
+        </tr>
+      `
+    )
+    .join("");
+}
+
 function shortMoney(value) {
   const abs = Math.abs(value);
   if (abs >= 1000000) return `$${(value / 1000000).toLocaleString("es-AR", { maximumFractionDigits: 1 })} M`;
@@ -782,6 +881,7 @@ function render() {
   const detailRows = reportType() === "changes" ? state.changes : state.joined;
   const productRows = buildMatrixRows(detailRows, (row) => row.productName, "Sin producto", 25);
   renderMatrixTable(els.productHead, els.productRows, "Producto", productRows, detailRows);
+  renderChangeComparisonTable();
 
   const matrixRows = rowsForMetric();
   const groupRows = buildMatrixRows(matrixRows, (row) => row.group, "Sin grupo", 25);
@@ -986,7 +1086,7 @@ function refreshBasePeriodOptions() {
     : selected[selected.length - 1]?.key || "";
 }
 
-function setupFilters() {
+function refreshFilterPanels() {
   const filterRows = reportType() === "changes" ? state.changes : state.joined;
   renderMultiFilter(
     els.groupPanel,
@@ -1012,12 +1112,16 @@ function setupFilters() {
     "Estado",
     "Estados"
   );
-  setupDropdown(els.groupBtn, els.groupPanel);
-  setupDropdown(els.clientBtn, els.clientPanel);
-  setupDropdown(els.statusBtn, els.statusPanel);
   els.groupBtn.disabled = false;
   els.clientBtn.disabled = false;
   els.statusBtn.disabled = false;
+}
+
+function setupFilters() {
+  refreshFilterPanels();
+  setupDropdown(els.groupBtn, els.groupPanel);
+  setupDropdown(els.clientBtn, els.clientPanel);
+  setupDropdown(els.statusBtn, els.statusPanel);
 
   [els.salesTab, els.changesTab].forEach((tab) => {
     tab.addEventListener("click", () => {

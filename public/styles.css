@@ -353,6 +353,10 @@ select:disabled {
   color: var(--bad) !important;
 }
 
+.hidden {
+  display: none !important;
+}
+
 .neutral {
   color: var(--muted) !important;
 }
