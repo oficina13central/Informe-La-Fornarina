@@ -874,20 +874,39 @@ function normalize() {
     })
     .filter((row) => row.month >= 1 && row.month <= 12 && row.year > 2000 && row.status === "ENTREGADO");
 
-  const cambioClientesByName = new Map(
-    state.cambioClientes.map((row) => [String(row.NOMBRE || "").trim().toUpperCase(), row.GRUPO || "Sin grupo"])
+  const clientGroupById = new Map(
+    state.comandas.map((row) => [String(row.CLIENTE || "").trim().toUpperCase(), row.GRUPO || "Sin grupo"])
+  );
+  const clientGroupByName = new Map(
+    state.comandas.map((row) => [String(row["NOMBRE DEL CLIENTE"] || "").trim().toUpperCase(), row.GRUPO || "Sin grupo"])
+  );
+  const cambiosByNumber = new Map(
+    state.cambioClientes.map((row) => [
+      row["NUMERO DE COMANDA DE CAMBIOS"],
+      {
+        clientId: row.CLIENTE || "",
+        clientName: row["NOMBRE CLIENTE"] || "Sin cliente",
+        status: row.STATUS || "Sin estado",
+        period: parsePeriodFromDate(row["FECHA DE ENTREGA"] || row["FECHA CREACION DE CDC"]),
+      },
+    ])
   );
 
   state.changes = state.cambioDetalles
     .map((row) => {
-      const period = parsePeriodFromDate(row["FECHA DE ENTREGA"]);
-      const clientName = row.CLIENTE || "Sin cliente";
+      const changeOrder = cambiosByNumber.get(row["NUMERO DE COMANDA DE CAMBIOS"]) || {};
+      const period = changeOrder.period || parsePeriodFromDate(row["FECHA DE ENTREGA"]);
+      const clientName = changeOrder.clientName || row.CLIENTE || "Sin cliente";
+      const group =
+        clientGroupById.get(String(changeOrder.clientId || "").trim().toUpperCase()) ||
+        clientGroupByName.get(String(clientName).trim().toUpperCase()) ||
+        "Sin grupo";
       return {
         orderNumber: row["NUMERO DE COMANDA DE CAMBIOS"] || row["ID_DETALLE DE CAMBIOS"],
         clientName,
         productName: row["NOMBRE PRODUCTO"] || "Sin producto",
-        group: cambioClientesByName.get(String(clientName).trim().toUpperCase()) || "Sin grupo",
-        status: "CAMBIO",
+        group,
+        status: changeOrder.status || "Sin estado",
         paymentStatus: "",
         units: parseNumber(row.CANTIDAD),
         bonusUnits: 0,
@@ -897,7 +916,7 @@ function normalize() {
         year: period?.year,
       };
     })
-    .filter((row) => row.month >= 1 && row.month <= 12 && row.year > 2000);
+    .filter((row) => row.month >= 1 && row.month <= 12 && row.year > 2000 && row.status === "ENTREGADO");
 }
 function setupPeriods() {
   const periodMap = new Map();
@@ -1036,7 +1055,7 @@ async function init() {
     const [comandas, detalles, cambioClientes, cambioDetalles] = await Promise.all([
       loadSheet("COMANDA"),
       loadSheet("DETALLE COMANDA"),
-      loadSheet("COMANDA DE CAMBIOS"),
+      loadSheet("COMANDA DE  CAMBIOS"),
       loadSheet("DETALLE DE CAMBIOS"),
     ]);
     state.comandas = comandas;
