@@ -33,7 +33,8 @@ const state = {
 };
 
 const els = {
-  reportType: document.querySelector("#reportTypeFilter"),
+  salesTab: document.querySelector("#salesTab"),
+  changesTab: document.querySelector("#changesTab"),
   metric: document.querySelector("#metricFilter"),
   basePeriod: document.querySelector("#basePeriodFilter"),
   groupBtn: document.querySelector("#groupFilterBtn"),
@@ -71,6 +72,10 @@ const els = {
   clientBar: document.querySelector("#clientBarChart"),
   print: document.querySelector("#printBtn"),
 };
+
+function reportType() {
+  return document.querySelector(".tab-button.active")?.dataset.reportType || "sales";
+}
 
 function parseCsv(csv) {
   const rows = [];
@@ -146,12 +151,12 @@ function formatMetric(value) {
 }
 
 function metricKey() {
-  if (els.reportType.value === "changes") return "units";
+  if (reportType() === "changes") return "units";
   return els.metric.value;
 }
 
 function metricLabel() {
-  if (els.reportType.value === "changes") return "Unidades cambiadas";
+  if (reportType() === "changes") return "Unidades cambiadas";
   if (metricKey() === "amount") return "Monto";
   if (metricKey() === "bonusUnits") return "Bonificacion";
   if (metricKey() === "deliveryUnits") return "Unidades a entregar";
@@ -180,6 +185,16 @@ function periodLabel(period) {
 function periodFromKey(key) {
   const [year, month] = key.split("-").map(Number);
   return { key, year, month };
+}
+
+function monthIndex(period) {
+  return period.year * 12 + period.month - 1;
+}
+
+function periodFromIndex(index) {
+  const year = Math.floor(index / 12);
+  const month = (index % 12) + 1;
+  return { key: periodKey(year, month), year, month };
 }
 
 function previousPeriod(period) {
@@ -287,7 +302,7 @@ function aggregate(rows) {
 }
 
 function rowsForMetric() {
-  if (els.reportType.value === "changes") return state.changes;
+  if (reportType() === "changes") return state.changes;
   return metricKey() === "amount" ? state.orders : state.joined;
 }
 
@@ -677,7 +692,7 @@ function renderMonthlySummary(periods) {
   const prev = previousPeriod(base);
   const yoy = sameMonthLastYear(base);
   const rows =
-    els.reportType.value === "changes"
+    reportType() === "changes"
       ? [
           { label: "Unidades cambiadas", metric: "units" },
           { label: "Registros de cambio", metric: "orders" },
@@ -702,7 +717,7 @@ function renderMonthlySummary(periods) {
   els.monthlyRows.innerHTML = rows
     .map((row) => {
       const sourceRows =
-        els.reportType.value === "changes"
+        reportType() === "changes"
           ? state.changes
           : row.metric === "amount" || row.metric === "orders"
             ? state.orders
@@ -749,7 +764,7 @@ function render() {
   els.yoyDelta.className = valueClass(yoyPct);
   els.yoyCaption.textContent = `vs ${periodLabel(yoy)}`;
   els.orderCount.textContent = formatNumber(baseAgg.orders);
-  els.orderCountLabel.textContent = els.reportType.value === "changes" ? "Cambios" : "Comandas";
+  els.orderCountLabel.textContent = reportType() === "changes" ? "Cambios" : "Comandas";
   els.lineCount.textContent = `${formatNumber(baseAgg.lines)} lineas de detalle`;
   els.summaryCaption.textContent = `${metricLabel()} seleccionado como metrica principal`;
   els.statusLine.textContent = `${periods.length} periodos seleccionados. Datos actualizados desde Google Sheets.`;
@@ -764,7 +779,7 @@ function render() {
 
   renderMonthlySummary(periods);
 
-  const detailRows = els.reportType.value === "changes" ? state.changes : state.joined;
+  const detailRows = reportType() === "changes" ? state.changes : state.joined;
   const productRows = buildMatrixRows(detailRows, (row) => row.productName, "Sin producto", 25);
   renderMatrixTable(els.productHead, els.productRows, "Producto", productRows, detailRows);
 
@@ -886,14 +901,27 @@ function normalize() {
 }
 function setupPeriods() {
   const periodMap = new Map();
-  const sourceRows = els.reportType?.value === "changes" ? state.changes : [...state.joined, ...state.orders];
+  const isChangesReport = reportType() === "changes";
+  const dataRows = isChangesReport ? state.changes : [...state.joined, ...state.orders];
+  const sourceRows = isChangesReport ? [...state.joined, ...state.orders, ...state.changes] : dataRows;
   sourceRows.forEach((row) => {
     const key = periodKey(row.year, row.month);
     periodMap.set(key, { key, year: row.year, month: row.month });
   });
 
-  state.periods = [...periodMap.values()].sort((a, b) => a.key.localeCompare(b.key));
-  const defaults = state.periods.slice(-5).map((period) => period.key);
+  const availablePeriods = [...periodMap.values()].sort((a, b) => a.key.localeCompare(b.key));
+  if (isChangesReport && availablePeriods.length) {
+    const first = monthIndex(availablePeriods[0]);
+    const last = monthIndex(availablePeriods[availablePeriods.length - 1]);
+    state.periods = Array.from({ length: last - first + 1 }, (_, index) => periodFromIndex(first + index));
+  } else {
+    state.periods = availablePeriods;
+  }
+
+  const dataPeriodKeys = [
+    ...new Set(dataRows.map((row) => periodKey(row.year, row.month)).sort((a, b) => a.localeCompare(b))),
+  ];
+  const defaults = (isChangesReport ? dataPeriodKeys : state.periods.map((period) => period.key)).slice(-5);
   state.selectedPeriodKeys = defaults.length ? defaults : state.periods.map((period) => period.key);
 
   els.periodPicker.innerHTML = state.periods
@@ -940,7 +968,7 @@ function refreshBasePeriodOptions() {
 }
 
 function setupFilters() {
-  const filterRows = els.reportType.value === "changes" ? state.changes : state.joined;
+  const filterRows = reportType() === "changes" ? state.changes : state.joined;
   renderMultiFilter(
     els.groupPanel,
     els.groupBtn,
@@ -972,14 +1000,22 @@ function setupFilters() {
   els.clientBtn.disabled = false;
   els.statusBtn.disabled = false;
 
-  els.reportType.addEventListener("input", () => {
-    selectedSet("groups").clear();
-    selectedSet("clients").clear();
-    selectedSet("statuses").clear();
-    resetPeriodsForCurrentReport();
-    refreshFilterPanels();
-    render();
+  [els.salesTab, els.changesTab].forEach((tab) => {
+    tab.addEventListener("click", () => {
+      if (tab.classList.contains("active")) return;
+      document.querySelectorAll(".tab-button").forEach((button) => button.classList.remove("active"));
+      tab.classList.add("active");
+      els.metric.disabled = reportType() === "changes";
+      selectedSet("groups").clear();
+      selectedSet("clients").clear();
+      selectedSet("statuses").clear();
+      resetPeriodsForCurrentReport();
+      refreshFilterPanels();
+      render();
+    });
   });
+
+  els.metric.disabled = reportType() === "changes";
 
   [els.metric, els.basePeriod, els.product].forEach((control) => {
     control.addEventListener("input", render);

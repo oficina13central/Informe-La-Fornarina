@@ -3,6 +3,7 @@ node_modules/
 pdf-preview/
 detalle-comanda.csv
 comanda.csv
+detalle-cambios.csv
 npm-debug.log*
 .DS_Store
 Thumbs.db
