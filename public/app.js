@@ -29,7 +29,14 @@ const state = {
   },
 };
 
+const PRESET_STORAGE_KEY = "chazarreta-report-presets";
+const NOTES_STORAGE_KEY = "chazarreta-report-notes";
+
 const els = {
+  preset: document.querySelector("#presetSelect"),
+  presetName: document.querySelector("#presetName"),
+  savePreset: document.querySelector("#savePresetBtn"),
+  deletePreset: document.querySelector("#deletePresetBtn"),
   metric: document.querySelector("#metricFilter"),
   basePeriod: document.querySelector("#basePeriodFilter"),
   groupBtn: document.querySelector("#groupFilterBtn"),
@@ -41,6 +48,10 @@ const els = {
   product: document.querySelector("#productSearch"),
   periodPicker: document.querySelector("#periodPicker"),
   statusLine: document.querySelector("#statusLine"),
+  notes: document.querySelector("#reportNotes"),
+  notesPreview: document.querySelector("#notesPreview"),
+  notesText: document.querySelector("#notesText"),
+  pdfFileName: document.querySelector("#pdfFileName"),
   executiveTitle: document.querySelector("#executiveTitle"),
   executiveFilters: document.querySelector("#executiveFilters"),
   baseTotal: document.querySelector("#baseTotal"),
@@ -66,6 +77,24 @@ const els = {
   clientBar: document.querySelector("#clientBarChart"),
   print: document.querySelector("#printBtn"),
 };
+
+const BUILT_IN_PRESETS = [
+  {
+    id: "builtin-monthly-amount",
+    name: "Informe gerencia - montos",
+    config: { metric: "amount", groups: [], clients: [], statuses: ["ENTREGADO"], product: "" },
+  },
+  {
+    id: "builtin-distributors-units",
+    name: "Distribuidores - unidades",
+    config: { metric: "units", groups: ["DISTRIBUIDORES"], clients: [], statuses: ["ENTREGADO"], product: "" },
+  },
+  {
+    id: "builtin-bonification",
+    name: "Analisis de bonificacion",
+    config: { metric: "bonusUnits", groups: [], clients: [], statuses: ["ENTREGADO"], product: "" },
+  },
+];
 
 function parseCsv(csv) {
   const rows = [];
@@ -162,6 +191,11 @@ function formatPct(value) {
   return `${sign}${value.toLocaleString("es-AR", { maximumFractionDigits: 1 })}%`;
 }
 
+function formatShare(value) {
+  if (value === null || !Number.isFinite(value)) return "Sin base";
+  return `${value.toLocaleString("es-AR", { maximumFractionDigits: 1 })}%`;
+}
+
 function periodKey(year, month) {
   return `${year}-${String(month).padStart(2, "0")}`;
 }
@@ -196,6 +230,118 @@ function fillSelect(select, values, allLabel = null) {
   if ([...select.options].some((option) => option.value === current)) {
     select.value = current;
   }
+}
+
+function readSavedPresets() {
+  try {
+    return JSON.parse(localStorage.getItem(PRESET_STORAGE_KEY) || "[]");
+  } catch {
+    return [];
+  }
+}
+
+function writeSavedPresets(presets) {
+  localStorage.setItem(PRESET_STORAGE_KEY, JSON.stringify(presets));
+}
+
+function currentPresetConfig() {
+  return {
+    metric: els.metric.value,
+    basePeriod: els.basePeriod.value,
+    selectedPeriodKeys: [...state.selectedPeriodKeys],
+    groups: [...selectedSet("groups")],
+    clients: [...selectedSet("clients")],
+    statuses: [...selectedSet("statuses")],
+    product: els.product.value,
+    notes: els.notes.value,
+  };
+}
+
+function setFilterSet(name, values = []) {
+  const set = selectedSet(name);
+  set.clear();
+  values.forEach((value) => set.add(value));
+}
+
+function applyPresetConfig(config) {
+  if (config.metric) els.metric.value = config.metric;
+  if (Array.isArray(config.selectedPeriodKeys) && config.selectedPeriodKeys.length) {
+    const valid = new Set(state.periods.map((period) => period.key));
+    state.selectedPeriodKeys = config.selectedPeriodKeys.filter((key) => valid.has(key));
+    if (!state.selectedPeriodKeys.length) state.selectedPeriodKeys = state.periods.slice(-5).map((period) => period.key);
+    els.periodPicker.querySelectorAll("input").forEach((input) => {
+      input.checked = state.selectedPeriodKeys.includes(input.value);
+    });
+    refreshBasePeriodOptions();
+  }
+  if (config.basePeriod && state.selectedPeriodKeys.includes(config.basePeriod)) {
+    els.basePeriod.value = config.basePeriod;
+  }
+  setFilterSet("groups", config.groups || []);
+  setFilterSet("clients", config.clients || []);
+  setFilterSet("statuses", config.statuses || []);
+  els.product.value = config.product || "";
+  els.notes.value = config.notes || "";
+  localStorage.setItem(NOTES_STORAGE_KEY, els.notes.value);
+  refreshFilterPanels();
+  render();
+}
+
+function renderPresetOptions() {
+  const saved = readSavedPresets();
+  els.preset.innerHTML = `<option value="">Seleccionar vista</option>`;
+  BUILT_IN_PRESETS.forEach((preset) => {
+    els.preset.append(new Option(preset.name, preset.id));
+  });
+  if (saved.length) {
+    const group = document.createElement("optgroup");
+    group.label = "Guardadas";
+    saved.forEach((preset) => group.append(new Option(preset.name, preset.id)));
+    els.preset.append(group);
+  }
+}
+
+function saveCurrentPreset() {
+  const name = els.presetName.value.trim();
+  if (!name) return;
+  const saved = readSavedPresets();
+  const id = `saved-${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+  const next = saved.filter((preset) => preset.id !== id);
+  next.push({ id, name, config: currentPresetConfig() });
+  writeSavedPresets(next);
+  renderPresetOptions();
+  els.preset.value = id;
+}
+
+function deleteSelectedPreset() {
+  const id = els.preset.value;
+  if (!id || id.startsWith("builtin-")) return;
+  writeSavedPresets(readSavedPresets().filter((preset) => preset.id !== id));
+  els.preset.value = "";
+  renderPresetOptions();
+}
+
+function selectedPresetConfig(id) {
+  return [...BUILT_IN_PRESETS, ...readSavedPresets()].find((preset) => preset.id === id)?.config;
+}
+
+function slugify(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .toLowerCase();
+}
+
+function suggestedPdfName() {
+  const base = activeBasePeriod();
+  const filters = [
+    selectedSet("groups").size ? `${selectedSet("groups").size}-grupos` : "todos",
+    selectedSet("clients").size ? `${selectedSet("clients").size}-distribuidores` : "",
+    els.product.value.trim() ? "producto-filtrado" : "",
+  ].filter(Boolean);
+  return `Informe-La-Fornarina-${slugify(periodLabel(base))}-${slugify(metricLabel())}${filters.length ? `-${filters.join("-")}` : ""}.pdf`;
 }
 
 function selectedSet(name) {
@@ -334,7 +480,10 @@ function buildMatrixRows(rows, keyFn, label, limit = 20) {
   const base = activeBasePeriod();
   const prev = previousPeriod(base);
   const yoy = sameMonthLastYear(base);
-  const grouped = groupRows(rows.filter(baseFilters), keyFn);
+  const filteredRows = rows.filter(baseFilters);
+  const baseTotal = aggregate(rowsForPeriod(base, filteredRows))[metricKey()];
+  const grouped = groupRows(filteredRows, keyFn);
+  let cumulative = 0;
 
   return [...grouped.entries()]
     .map(([name, itemRows]) => {
@@ -362,6 +511,14 @@ function buildMatrixRows(rows, keyFn, label, limit = 20) {
       };
     })
     .sort((a, b) => b.baseValue - a.baseValue)
+    .map((row) => {
+      cumulative += row.baseValue;
+      return {
+        ...row,
+        share: pct(row.baseValue, baseTotal),
+        cumulativeShare: pct(cumulative, baseTotal),
+      };
+    })
     .slice(0, limit);
 }
 
@@ -371,6 +528,8 @@ function renderMatrixTable(head, body, firstColumn, rows, totalRows = null) {
     <tr>
       <th>${firstColumn}</th>
       ${periods.map((period) => `<th class="num">${periodLabel(period)}</th>`).join("")}
+      <th class="num">% total</th>
+      <th class="num">% acum.</th>
       <th class="num">Var. mes anterior</th>
       <th class="num">Var. a\u00f1o anterior</th>
     </tr>
@@ -382,6 +541,8 @@ function renderMatrixTable(head, body, firstColumn, rows, totalRows = null) {
         <tr>
           <td>${row.name}</td>
           ${row.selectedValues.map((value) => `<td class="num">${formatMetric(value)}</td>`).join("")}
+          <td class="num">${formatShare(row.share)}</td>
+          <td class="num">${formatShare(row.cumulativeShare)}</td>
           <td class="num ${valueClass(row.mom)}">${formatPct(row.mom)}</td>
           <td class="num ${valueClass(row.yoy)}">${formatPct(row.yoy)}</td>
         </tr>
@@ -406,6 +567,8 @@ function renderMatrixTable(head, body, firstColumn, rows, totalRows = null) {
         <tr class="total-row">
           <td>Total</td>
           ${selectedValues.map((value) => `<td class="num">${formatMoney(value)}</td>`).join("")}
+          <td class="num">100%</td>
+          <td class="num">100%</td>
           <td class="num ${valueClass(mom)}">${formatPct(mom)}</td>
           <td class="num ${valueClass(yearly)}">${formatPct(yearly)}</td>
         </tr>
@@ -734,6 +897,10 @@ function render() {
   els.summaryCaption.textContent = `${metricLabel()} seleccionado como metrica principal`;
   els.statusLine.textContent = `${periods.length} periodos seleccionados. Datos actualizados desde Google Sheets.`;
   els.executiveTitle.textContent = `${metricLabel()} - ${periodLabel(base)}`;
+  const notes = els.notes.value.trim();
+  els.notesPreview.hidden = !notes;
+  els.notesText.textContent = notes;
+  els.pdfFileName.textContent = suggestedPdfName();
   const activeFilters = [
     selectedSet("groups").size ? filterSummary("groups", "Grupo", "Grupos") : null,
     selectedSet("clients").size ? filterSummary("clients", "Distribuidor", "Distribuidores") : null,
@@ -876,19 +1043,7 @@ function setupPeriods() {
   refreshBasePeriodOptions();
 }
 
-function refreshBasePeriodOptions() {
-  const selected = selectedPeriods();
-  const current = els.basePeriod.value;
-  fillSelect(
-    els.basePeriod,
-    selected.map((period) => ({ value: period.key, label: periodLabel(period) }))
-  );
-  els.basePeriod.value = state.selectedPeriodKeys.includes(current)
-    ? current
-    : selected[selected.length - 1]?.key || "";
-}
-
-function setupFilters() {
+function refreshFilterPanels() {
   renderMultiFilter(
     els.groupPanel,
     els.groupBtn,
@@ -913,6 +1068,24 @@ function setupFilters() {
     "Estado",
     "Estados"
   );
+}
+
+function refreshBasePeriodOptions() {
+  const selected = selectedPeriods();
+  const current = els.basePeriod.value;
+  fillSelect(
+    els.basePeriod,
+    selected.map((period) => ({ value: period.key, label: periodLabel(period) }))
+  );
+  els.basePeriod.value = state.selectedPeriodKeys.includes(current)
+    ? current
+    : selected[selected.length - 1]?.key || "";
+}
+
+function setupFilters() {
+  renderPresetOptions();
+  els.notes.value = localStorage.getItem(NOTES_STORAGE_KEY) || "";
+  refreshFilterPanels();
   setupDropdown(els.groupBtn, els.groupPanel);
   setupDropdown(els.clientBtn, els.clientPanel);
   setupDropdown(els.statusBtn, els.statusPanel);
@@ -922,6 +1095,26 @@ function setupFilters() {
 
   [els.metric, els.basePeriod, els.product].forEach((control) => {
     control.addEventListener("input", render);
+  });
+
+  els.notes.addEventListener("input", () => {
+    localStorage.setItem(NOTES_STORAGE_KEY, els.notes.value);
+    render();
+  });
+
+  els.preset.addEventListener("change", () => {
+    const config = selectedPresetConfig(els.preset.value);
+    if (config) applyPresetConfig(config);
+  });
+
+  els.savePreset.addEventListener("click", () => {
+    saveCurrentPreset();
+    render();
+  });
+
+  els.deletePreset.addEventListener("click", () => {
+    deleteSelectedPreset();
+    render();
   });
 
   document.addEventListener("click", (event) => {
@@ -935,7 +1128,10 @@ function setupFilters() {
 
 async function init() {
   try {
-    els.print.addEventListener("click", () => window.print());
+    els.print.addEventListener("click", () => {
+      document.title = suggestedPdfName().replace(/\.pdf$/i, "");
+      window.print();
+    });
     const [comandas, detalles] = await Promise.all([loadSheet("COMANDA"), loadSheet("DETALLE COMANDA")]);
     state.comandas = comandas;
     state.detalles = detalles;

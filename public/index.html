@@ -20,6 +20,12 @@
     <main>
       <section class="toolbar" aria-label="Filtros del informe">
         <label>
+          Vista guardada
+          <select id="presetSelect">
+            <option value="">Seleccionar vista</option>
+          </select>
+        </label>
+        <label>
           M&eacute;trica
           <select id="metricFilter">
             <option value="amount">Monto</option>
@@ -51,6 +57,22 @@
           Producto
           <input id="productSearch" type="search" placeholder="Buscar producto">
         </label>
+      </section>
+
+      <section class="tools-panel" aria-label="Herramientas del informe">
+        <div class="preset-actions">
+          <input id="presetName" type="text" placeholder="Nombre de la vista">
+          <button id="savePresetBtn" type="button">Guardar vista</button>
+          <button id="deletePresetBtn" type="button">Eliminar vista</button>
+        </div>
+        <label class="notes-field">
+          Notas del informe
+          <textarea id="reportNotes" rows="3" placeholder="Escribe observaciones para que salgan en el PDF"></textarea>
+        </label>
+        <div class="export-name">
+          <span>Nombre sugerido del PDF</span>
+          <strong id="pdfFileName">-</strong>
+        </div>
       </section>
 
       <section class="period-panel">
@@ -111,6 +133,11 @@
             </div>
             <canvas id="groupPieChart" height="250"></canvas>
           </article>
+        </section>
+
+        <section id="notesPreview" class="notes-preview" hidden>
+          <h2>Notas del informe</h2>
+          <p id="notesText"></p>
         </section>
       </section>
 
