@@ -854,6 +854,15 @@ function render() {
   const mom = pct(baseValue, prevValue);
   const yoyPct = pct(baseValue, yoyValue);
 
+  // Conteo de comandas y líneas: siempre desde fuentes fijas independientemente de la métrica seleccionada.
+  // state.orders → una fila por comanda (para contar comandas únicas)
+  // state.joined → una fila por línea de detalle (para contar líneas)
+  const isChanges = reportType() === "changes";
+  const fixedOrderRows = isChanges ? rowsForPeriod(base, state.changes) : rowsForPeriod(base, state.orders);
+  const fixedDetailRows = isChanges ? fixedOrderRows : rowsForPeriod(base, state.joined);
+  const fixedOrderCount = aggregate(fixedOrderRows).orders;
+  const fixedLineCount = fixedDetailRows.length;
+
   els.baseTotal.textContent = formatMetric(baseValue);
   els.baseCaption.textContent = periodLabel(base);
   els.momDelta.textContent = formatPct(mom);
@@ -862,9 +871,9 @@ function render() {
   els.yoyDelta.textContent = formatPct(yoyPct);
   els.yoyDelta.className = valueClass(yoyPct);
   els.yoyCaption.textContent = `vs ${periodLabel(yoy)}`;
-  els.orderCount.textContent = formatNumber(baseAgg.orders);
-  els.orderCountLabel.textContent = reportType() === "changes" ? "Cambios" : "Comandas";
-  els.lineCount.textContent = `${formatNumber(baseAgg.lines)} lineas de detalle`;
+  els.orderCount.textContent = formatNumber(fixedOrderCount);
+  els.orderCountLabel.textContent = isChanges ? "Cambios" : "Comandas";
+  els.lineCount.textContent = `${formatNumber(fixedLineCount)} lineas de detalle`;
   els.summaryCaption.textContent = `${metricLabel()} seleccionado como metrica principal`;
   els.statusLine.textContent = `${periods.length} periodos seleccionados. Datos actualizados desde Google Sheets.`;
   els.executiveTitle.textContent = `${metricLabel()} - ${periodLabel(base)}`;
