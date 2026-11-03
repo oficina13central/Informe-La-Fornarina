@@ -388,6 +388,7 @@ function buildMatrixRows(rows, keyFn, label, limit = 20) {
         yoy: pct(current, yoyValue),
       };
     })
+    .filter((row) => selected.length === 0 || row.selectedValues.some((value) => value !== 0))
     .sort((a, b) => b.baseValue - a.baseValue)
     .slice(0, limit);
 }
